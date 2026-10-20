@@ -7,7 +7,7 @@ description: Estandariza la definición de funcionalidades antes de la implement
 
 ## 1) Metadata
 - **Skill ID:** feature-intake-spec-checklist
-- **Version:** 0.1.0
+- **Version:** 0.2.0
 - **Purpose:** Estandarizar la definición de funcionalidades antes de la implementación generando un paquete mínimo trazable que cubra alcance, decisiones, riesgos, aceptación y validación.
 - **Audience (roles):** Chapter/PO, Tech Lead, Backend, Frontend, QA, Cyber
 - **When to use:** Antes de crear tareas de implementación o abrir un PR significativo.
@@ -79,4 +79,4 @@ La salida es válida si:
 
 ## 6) Evidence
 - **Para una especificación de funcionalidad:** incluye en el plan de validación la evidencia concreta que corresponda a los criterios de aceptación y al DoD del equipo (por ejemplo, resultados de pruebas, checklist o documentación actualizada). No solicites los archivos de la skill ni un tag como evidencia de cada funcionalidad.
-- **Al crear, actualizar o publicar esta skill:** referencia `SKILL.md` y los ejemplos `examples/input.sample.md` y `examples/output.sample.md` en el PR o entrega. Si se publica una versión, actualiza la versión declarada y crea un tag coherente con ella (por ejemplo, `skill-feature-intake-v0.1.0`); no crees un tag por el uso normal de la skill.
+- **Al crear, actualizar o publicar esta skill:** referencia `SKILL.md` y los ejemplos `examples/input.sample.md` y `examples/output.sample.md` en el PR o entrega. Si se publica una versión, actualiza la versión declarada y crea un tag coherente con ella (por ejemplo, `skill-feature-intake-v0.2.0`); no crees un tag por el uso normal de la skill.
