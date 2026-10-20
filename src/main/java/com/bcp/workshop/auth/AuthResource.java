@@ -19,6 +19,9 @@ public class AuthResource {
     @Inject
     LegacyDatabase database;
 
+    @Inject
+    LegacyTokenUtil tokenUtil;
+
     @POST
     @Path("/login")
     public Response login(LoginRequest request) {
@@ -26,7 +29,9 @@ public class AuthResource {
             if (request == null) {
                 return Response.status(400).entity(Map.of("message", "Request is null")).build();
             } else {
-                if (request.username == null || request.username.trim().isEmpty()) {
+                if (!"angular-workshop".equals(request.client)) {
+                    return Response.status(400).entity(Map.of("message", "Invalid client")).build();
+                } else if (request.username == null || request.username.trim().isEmpty()) {
                     return Response.status(400).entity(Map.of("message", "Username is required")).build();
                 } else {
                     if (request.password == null || request.password.trim().isEmpty()) {
@@ -36,10 +41,10 @@ public class AuthResource {
                         if (user == null) {
                             return Response.status(401).entity(Map.of("message", "Invalid user " + request.username + " or password")).build();
                         } else {
-                            String token = LegacyTokenUtil.create(user.username(), user.role());
+                            LegacyTokenUtil.IssuedToken issuedToken = tokenUtil.create(user.username(), user.role(), request.client);
                             Map<String, Object> response = new HashMap<>();
-                            response.put("token", token);
-                            response.put("expiresIn", 3600);
+                            response.put("token", issuedToken.token());
+                            response.put("expiresIn", issuedToken.expiresIn());
                             response.put("user", Map.of(
                                     "username", user.username(),
                                     "displayName", StringEscapeUtils.escapeHtml4(user.displayName()),
