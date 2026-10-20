@@ -12,8 +12,8 @@ description: Estandariza la definición de funcionalidades antes de la implement
 - **Audience (roles):** Chapter/PO, Tech Lead, Backend, Frontend, QA, Cyber
 - **When to use:** Antes de crear tareas de implementación o abrir un PR significativo.
 - **When NOT to use:** Incidentes P1 de producción, cambios triviales como typos o tareas sin impacto funcional.
-- **Sensitive inputs:** No incluyas datos reales de clientes, credenciales, secretos, tokens ni URLs internas no autorizadas.
-- **Expected output:** Markdown estructurado mediante la sección Output a continuación.
+- **Sensitive inputs:** No solicites ni incluyas datos reales de clientes, credenciales, secretos, tokens ni URLs internas no autorizadas. Si el usuario los proporciona, no los repitas, cites, transformes ni guardes en la salida; indica de forma genérica que debe retirar o redactar el contenido sensible antes de continuar.
+- **Expected output:** Un archivo Markdown con la especificación, guardado en el workspace según las reglas de la sección Output.
 
 ## 2) Inputs
 Proporciona la información en este formato:
@@ -28,7 +28,14 @@ Proporciona la información en este formato:
 - **Team Definition of Done (DoD):** (if available)
 
 ## 3) Output
-Devuelve **solo** un documento Markdown con estas secciones y bullets:
+Genera un documento Markdown con estas secciones y bullets y guárdalo en el workspace:
+
+- **Ruta predeterminada:** `docs/specs/<slug-de-la-funcionalidad>-spec.md`. Deriva el slug del nombre o resumen de la funcionalidad, usando minúsculas, guiones y caracteres seguros para nombres de archivo.
+- Si el usuario indica una ruta, úsala siempre que esté dentro del workspace.
+- Crea el directorio de destino si no existe.
+- No sobrescribas un archivo existente. Si la ruta ya está ocupada, agrega un sufijo numérico (`-2`, `-3`, etc.) hasta encontrar un nombre libre.
+- Tras guardar el archivo, responde con una confirmación breve y un enlace al archivo. No dupliques el documento completo en el chat.
+- Si no puedes escribir en el workspace, informa claramente del impedimento y devuelve el contenido Markdown para que el usuario pueda guardarlo manualmente.
 
 1. **Summary**
 2. **Scope**
@@ -55,10 +62,11 @@ Devuelve **solo** un documento Markdown con estas secciones y bullets:
 ## 4) Constraints
 - No inventes requisitos: si falta información, inclúyela bajo **Preguntas abiertas**.
 - No propongas herramientas fuera del stack permitido.
-- No incluyas datos sensibles ni secretos.
+- No incluyas datos sensibles ni secretos. Si aparecen en la entrada, omítelos por completo y solicita su retirada o redacción con una nota genérica, sin identificar ni reproducir el contenido.
 - Los criterios de aceptación deben ser verificables; no escribas “mejorar el rendimiento” sin una métrica.
 - El plan de validación debe incluir al menos un elemento de evidencia concreto, como salida de pruebas, un checklist o un archivo actualizado.
-- Mantén la salida en un máximo de 1-2 páginas para que siga siendo usable.
+- El contenido del archivo generado debe cumplir todas las secciones y reglas de validación de esta skill.
+- Mantén las nueve secciones y usa bullets concisos. Apunta a 1-2 páginas; adapta el nivel de detalle a la complejidad y no omitas criterios, riesgos, validaciones o evidencias relevantes solo para cumplir un límite rígido.
 
 ## 5) Validation Rules
 La salida es válida si:
@@ -70,8 +78,5 @@ La salida es válida si:
 - No contiene supuestos no declarados.
 
 ## 6) Evidence
-Adjunta o referencia estos elementos en el PR o entrega:
-- `SKILL.md` versionado.
-- `examples/input.sample.md`.
-- `examples/output.sample.md`.
-- Tag de versión para el Skill, como `skill-feature-intake-v0.1.0`.
+- **Para una especificación de funcionalidad:** incluye en el plan de validación la evidencia concreta que corresponda a los criterios de aceptación y al DoD del equipo (por ejemplo, resultados de pruebas, checklist o documentación actualizada). No solicites los archivos de la skill ni un tag como evidencia de cada funcionalidad.
+- **Al crear, actualizar o publicar esta skill:** referencia `SKILL.md` y los ejemplos `examples/input.sample.md` y `examples/output.sample.md` en el PR o entrega. Si se publica una versión, actualiza la versión declarada y crea un tag coherente con ella (por ejemplo, `skill-feature-intake-v0.1.0`); no crees un tag por el uso normal de la skill.
