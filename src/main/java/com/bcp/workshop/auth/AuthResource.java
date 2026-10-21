@@ -20,7 +20,7 @@ public class AuthResource {
     LegacyDatabase database;
 
     @Inject
-    LegacyTokenUtil tokenUtil;
+    TokenService tokenService;
 
     @POST
     @Path("/login")
@@ -28,34 +28,33 @@ public class AuthResource {
         try {
             if (request == null) {
                 return Response.status(400).entity(Map.of("message", "Request is null")).build();
-            } else {
-                if (!"angular-workshop".equals(request.client)) {
-                    return Response.status(400).entity(Map.of("message", "Invalid client")).build();
-                } else if (request.username == null || request.username.trim().isEmpty()) {
-                    return Response.status(400).entity(Map.of("message", "Username is required")).build();
-                } else {
-                    if (request.password == null || request.password.trim().isEmpty()) {
-                        return Response.status(400).entity(Map.of("message", "Password is required")).build();
-                    } else {
-                        UserRecord user = database.findByCredentials(request.username, request.password);
-                        if (user == null) {
-                            return Response.status(401).entity(Map.of("message", "Invalid user " + request.username + " or password")).build();
-                        } else {
-                            LegacyTokenUtil.IssuedToken issuedToken = tokenUtil.create(user.username(), user.role(), request.client);
-                            Map<String, Object> response = new HashMap<>();
-                            response.put("token", issuedToken.token());
-                            response.put("expiresIn", issuedToken.expiresIn());
-                            response.put("user", Map.of(
-                                    "username", user.username(),
-                                    "displayName", StringEscapeUtils.escapeHtml4(user.displayName()),
-                                    "role", user.role()
-                            ));
-                            response.put("debug", "authenticated-with-legacy-flow");
-                            return Response.ok(response).build();
-                        }
-                    }
-                }
             }
+            if (request.username == null || request.username.trim().isEmpty()) {
+                return Response.status(400).entity(Map.of("message", "Username is required")).build();
+            }
+            if (request.password == null || request.password.trim().isEmpty()) {
+                return Response.status(400).entity(Map.of("message", "Password is required")).build();
+            }
+            if (request.client == null || request.client.trim().isEmpty()) {
+                return Response.status(400).entity(Map.of("message", "Client is required")).build();
+            }
+
+            UserRecord user = database.findByCredentials(request.username, request.password);
+            if (user == null) {
+                return Response.status(401).entity(Map.of("message", "Invalid user " + request.username + " or password")).build();
+            }
+
+            TokenService.IssuedToken issuedToken = tokenService.issue(user.username(), request.client);
+            Map<String, Object> response = new HashMap<>();
+            response.put("token", issuedToken.token());
+            response.put("expiresIn", issuedToken.expiresIn());
+            response.put("user", Map.of(
+                    "username", user.username(),
+                    "displayName", StringEscapeUtils.escapeHtml4(user.displayName()),
+                    "role", user.role()
+            ));
+            response.put("debug", "authenticated-with-legacy-flow");
+            return Response.ok(response).build();
         } catch (Exception error) {
             return Response.status(500).entity(Map.of(
                     "message", error.getMessage() == null ? "Unknown error" : error.getMessage(),

@@ -1,17 +1,24 @@
 package com.bcp.workshop.auth;
 
 import io.quarkus.test.junit.QuarkusTest;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.auth0.jwt.interfaces.DecodedJWT;
+import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
-import java.time.Instant;
-import java.util.Base64;
+import java.util.Set;
+import java.util.logging.LogManager;
+import java.util.logging.SimpleFormatter;
+import java.util.logging.StreamHandler;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.Matchers.hasKey;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -19,6 +26,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @QuarkusTest
 class AuthResourceTest {
+    private static final String TEST_SECRET = "test-only-secret-0123456789abcdef0123456789abcdef";
+
+    @Inject
+    TokenService tokenService;
+
     @Test
     void logsInWithWorkshopUserAndReturnsCompatibleSignedToken() throws Exception {
         var response = given()
@@ -28,38 +40,52 @@ class AuthResourceTest {
                 .then()
                 .statusCode(200)
                 .body("user.username", is("student"))
+                .body("user.displayName", is("Workshop Student"))
+                .body("user.role", is("STUDENT"))
+                .body("user", not(hasKey("password")))
+                .body("user", not(hasKey("hash")))
+                .body("user", not(hasKey("client")))
+                .body("expiresIn", is(3600))
+                .body("debug", is("authenticated-with-legacy-flow"))
                 .body("token", notNullValue());
 
         String token = response.extract().jsonPath().getString("token");
         long expiresIn = response.extract().jsonPath().getLong("expiresIn");
-        String[] segments = token.split("\\.");
-        assertEquals(3, segments.length);
-
-        ObjectMapper mapper = new ObjectMapper();
-        JsonNode header = mapper.readTree(Base64.getUrlDecoder().decode(segments[0]));
-        JsonNode claims = mapper.readTree(Base64.getUrlDecoder().decode(segments[1]));
-        assertEquals("HS256", header.get("alg").asText());
-        assertEquals("student", claims.get("sub").asText());
-        assertEquals("STUDENT", claims.get("role").asText());
-        assertEquals("angular-workshop", claims.get("client").asText());
-        assertTrue(claims.has("iat"));
-        assertTrue(claims.has("exp"));
-        assertTrue(Math.abs(expiresIn - (claims.get("exp").asLong() - Instant.now().getEpochSecond())) <= 5);
+    DecodedJWT claims = tokenService.verify(token);
+    assertEquals("student", claims.getSubject());
+    assertEquals("angular-workshop", claims.getClaim("client").asString());
+    assertTrue(claims.getIssuedAt().before(claims.getExpiresAt()));
+    assertEquals(3600, claims.getExpiresAt().toInstant().getEpochSecond()
+        - claims.getIssuedAt().toInstant().getEpochSecond());
+    assertEquals(3600, expiresIn);
+    assertEquals(Set.of("sub", "client", "iat", "exp"), claims.getClaims().keySet());
     }
 
     @Test
-    void rejectsMissingOrUnsupportedClient() {
-        given()
+    void requiresNonBlankClientAndAcceptsArbitraryClient() {
+        for (String body : new String[]{
+            "{\"username\":\"student\",\"password\":\"Workshop123!\"}",
+            "{\"username\":\"student\",\"password\":\"Workshop123!\",\"client\":\"\"}",
+            "{\"username\":\"student\",\"password\":\"Workshop123!\",\"client\":\"   \"}"
+        }) {
+            given()
                 .contentType("application/json")
-                .body("{\"username\":\"student\",\"password\":\"Workshop123!\"}")
+                .body(body)
                 .when().post("/auth/login")
-                .then().statusCode(400);
+                .then()
+                .statusCode(400)
+                .body("message", is("Client is required"))
+                .body("token", nullValue());
+        }
 
-        given()
-                .contentType("application/json")
-                .body("{\"username\":\"student\",\"password\":\"Workshop123!\",\"client\":\"other\"}")
-                .when().post("/auth/login")
-                .then().statusCode(400);
+        String token = given()
+            .contentType("application/json")
+            .body("{\"username\":\"student\",\"password\":\"Workshop123!\",\"client\":\" other \"}")
+            .when().post("/auth/login")
+            .then()
+            .statusCode(200)
+            .extract().jsonPath().getString("token");
+        assertEquals(" other ", tokenService.verify(token).getClaim("client").asString());
     }
 
     @Test
@@ -68,14 +94,70 @@ class AuthResourceTest {
                 .contentType("application/json")
                 .body("{\"username\":\"student\",\"password\":\"wrong\",\"client\":\"angular-workshop\"}")
                 .when().post("/auth/login")
-                .then().statusCode(401);
+                .then()
+                .statusCode(401)
+                .body("message", is("Invalid user student or password"))
+                .body("token", nullValue());
+            }
+
+            @Test
+            void preservesExistingRequiredFieldErrors() {
+            given()
+                .contentType("application/json")
+                .body("null")
+                .when().post("/auth/login")
+                .then().statusCode(400).body("message", is("Request is null"));
+
+            given()
+                .contentType("application/json")
+                .body("{\"password\":\"Workshop123!\"}")
+                .when().post("/auth/login")
+                .then().statusCode(400).body("message", is("Username is required"));
+
+            given()
+                .contentType("application/json")
+                .body("{\"username\":\"student\"}")
+                .when().post("/auth/login")
+                .then().statusCode(400).body("message", is("Password is required"));
+            }
+
+            @Test
+            void doesNotLogTokenSecretOrPasswordsForSuccessfulAndFailedLogin() {
+            var rootLogger = LogManager.getLogManager().getLogger("");
+            var capturedOutput = new ByteArrayOutputStream();
+            var handler = new StreamHandler(capturedOutput, new SimpleFormatter());
+            rootLogger.addHandler(handler);
+            String token;
+            try {
+                token = given()
+                    .contentType("application/json")
+                    .body("{\"username\":\"student\",\"password\":\"Workshop123!\",\"client\":\"angular-workshop\"}")
+                    .when().post("/auth/login")
+                    .then().statusCode(200).extract().jsonPath().getString("token");
+
+                given()
+                    .contentType("application/json")
+                    .body("{\"username\":\"student\",\"password\":\"failed-password\",\"client\":\"angular-workshop\"}")
+                    .when().post("/auth/login")
+                    .then().statusCode(401);
+            } finally {
+                handler.flush();
+                rootLogger.removeHandler(handler);
+                handler.close();
+            }
+
+            String logs = capturedOutput.toString(StandardCharsets.UTF_8);
+            assertFalse(logs.contains(token));
+            assertFalse(logs.contains(TEST_SECRET));
+            assertFalse(logs.contains("Workshop123!"));
+            assertFalse(logs.contains("failed-password"));
     }
 
     @Test
     void requiresStrongConfiguredSecret() {
-        assertThrows(IllegalStateException.class, () -> LegacyTokenUtil.validateSecret(null));
-        assertThrows(IllegalStateException.class, () -> LegacyTokenUtil.validateSecret("too-short"));
-        assertDoesNotThrow(() -> LegacyTokenUtil.validateSecret(
+        assertThrows(IllegalStateException.class, () -> TokenService.validateSecret(null));
+        assertThrows(IllegalStateException.class, () -> TokenService.validateSecret("too-short"));
+        assertDoesNotThrow(() -> TokenService.validateSecret(
                 "0123456789abcdef0123456789abcdef"));
     }
 }

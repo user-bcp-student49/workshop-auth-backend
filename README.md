@@ -8,6 +8,12 @@ Backend Quarkus que autentica usuarios de laboratorio almacenados en SQLite y en
 
 Requisitos: JDK 21 y Maven 3.9+.
 
+Configura `AUTH_TOKEN_SECRET` en el entorno antes de iniciar Quarkus fuera del
+perfil `%test`. Debe tener al menos 32 bytes UTF-8. El servicio no incorpora un
+secreto predeterminado y falla al iniciar si falta la configuración. El perfil
+`%test` usa un valor sintético exclusivo de las pruebas; no lo reutilices fuera
+de ellas.
+
 ```bash
 mvn quarkus:dev
 ```

@@ -39,10 +39,10 @@ objeto JSON con los siguientes campos:
 |---|---|---|---|
 | username | string | si | Nombre exacto del usuario. No admite null, cadena vacia ni solo blancos segun String.trim(). |
 | password | string | si | Password exacto. No admite null, cadena vacia ni solo blancos segun String.trim(). |
-| client | string | no | Identificador del cliente; puede omitirse y no interviene en autenticacion ni en la respuesta. |
+| client | string | si | Identificador no nulo, vacio ni compuesto solo por espacios. Se conserva exactamente como se envia y se incluye en el claim `client` del token. No hay allowlist. |
 
 DTO: [src/main/java/com/bcp/workshop/auth/LoginRequest.java:4](../src/main/java/com/bcp/workshop/auth/LoginRequest.java#L4).
-Validacion, en orden request, username y password:
+Validacion, en orden request, username, password y client:
 [src/main/java/com/bcp/workshop/auth/AuthResource.java:38](../src/main/java/com/bcp/workshop/auth/AuthResource.java#L38).
 `trim()` solo detecta vacios; no recorta las credenciales usadas para autenticar.
 La comparacion distingue mayusculas/minusculas con el esquema SQLite actual.
@@ -70,25 +70,21 @@ por el cliente. No se devuelven id, password, hash ni client.
 
 | campo | tipo | descripcion |
 |---|---|---|
-| token | string | Token no vacio generado por el emisor legacy; no es JWT. Cambia con el instante de emision. |
-| expiresIn | integer | Valor 3600, en segundos; duracion declarada del token, no prueba de validacion por consumidores. |
+| token | string | JWT/JWS compacto firmado con HS256. El cliente debe tratarlo como opaco. Claims: `sub`, `client`, `iat` y `exp`; no incluye `role`. |
+| expiresIn | integer | Valor 3600, en segundos; concuerda con `exp - now` dentro de una tolerancia maxima de un segundo. |
 | user | object | Datos publicos del usuario autenticado. |
 | user.username | string | Username almacenado. |
 | user.displayName | string | Nombre visible almacenado, escapado con escapeHtml4. Por ejemplo, `<Student & Trainer>` se devuelve como `&lt;Student &amp; Trainer&gt;`. |
 | user.role | string | Rol almacenado. Los seeds usan STUDENT y TRAINER; el codigo no define un enum ni restringe todos los usuarios a esos dos valores. |
 | debug | string | Valor literal `authenticated-with-legacy-flow`, que sigue presente tras el refactor. |
 
-Evidencia: [src/main/java/com/bcp/workshop/auth/LoginResponse.java:3](../src/main/java/com/bcp/workshop/auth/LoginResponse.java#L3),
-[src/main/java/com/bcp/workshop/auth/UserResponse.java:5](../src/main/java/com/bcp/workshop/auth/UserResponse.java#L5),
-[src/main/java/com/bcp/workshop/auth/TokenPolicy.java:4](../src/main/java/com/bcp/workshop/auth/TokenPolicy.java#L4),
-[src/main/java/com/bcp/workshop/auth/LegacyDatabase.java:53](../src/main/java/com/bcp/workshop/auth/LegacyDatabase.java#L53).
+La identidad del claim `sub` procede del usuario autenticado; `client` conserva el valor aceptado de la solicitud. La respuesta `user` sigue exponiendo username, displayName escapado y role.
 
-Ejemplo JSON real y completo capturado el 2026-10-06 para la entrada anterior.
-El token es un snapshot de laboratorio, no un token vigente para reutilizar:
+Ejemplo de forma de respuesta. El token es un placeholder, no es un token firmado utilizable:
 
 ```json
 {
-  "token": "c3R1ZGVudHxTVFVERU5UfDE3OTEzMDc5OTd8V09SS1NIT1BfU0VDUkVUXzIwMjY=",
+  "token": "<JWT firmado; tratar como opaco>",
   "expiresIn": 3600,
   "user": {
     "username": "student",
@@ -124,6 +120,13 @@ password esta ausente, null, vacio o solo blancos.
 
 ```json
 {"message":"Password is required"}
+```
+
+**400 Bad Request: client requerido.** Username y password superan sus
+validaciones, pero `client` esta ausente, null, vacio o solo blancos.
+
+```json
+{"message":"Client is required"}
 ```
 
 Estos tres mensajes proceden de
@@ -191,24 +194,22 @@ no existe una respuesta HTTP de login para ese fallo
 
 ### 6. Notas de seguridad
 
-- El token actual NO esta firmado. Es Base64 de bytes UTF-8 de
-  `username|role|expiry|SECRET`. expiry es epoch en segundos calculado a una hora
-  de la emision; no hay validacion de ese timestamp en este backend emisor.
-  No afirmar que expira de manera efectiva en todos los consumidores.
-  [src/main/java/com/bcp/workshop/auth/LegacyTokenUtil.java:13](../src/main/java/com/bcp/workshop/auth/LegacyTokenUtil.java#L13).
-- Existe TokenService RS256, pero el login NO lo llama: sigue invocando
-  LegacyTokenUtil. El cliente no debe intentar interpretar el token como JWT.
-  [src/main/java/com/bcp/workshop/auth/AuthService.java:30](../src/main/java/com/bcp/workshop/auth/AuthService.java#L30).
-  Pregunta abierta: cuando se activara JWT y que consumidores verificaran firma,
-  issuer, rol y expiracion. No se inspeccionaron otros repositorios.
+- El token emitido es HS256 y contiene solo `sub`, `client`, `iat` y `exp`.
+  El backend verifica firma y expiracion en su servicio interno; no se agrega un
+  endpoint de validacion. Los consumidores externos deben coordinar la aceptacion
+  del nuevo formato y nunca recibir el secreto HMAC en codigo cliente.
+- `AUTH_TOKEN_SECRET` debe configurarse externamente y contener al menos 32
+  bytes UTF-8. No existe secreto predeterminado para perfiles fuera de test; si
+  falta la configuracion, el servicio no inicia. El perfil `%test` usa un valor
+  sintetico exclusivo de pruebas, no reutilizable en otros entornos.
 - Passwords se verifican con Argon2id y salt aleatorio, y username se consulta
   con PreparedStatement. Nunca se devuelve el hash.
   [src/main/java/com/bcp/workshop/auth/PasswordHasher.java:20](../src/main/java/com/bcp/workshop/auth/PasswordHasher.java#L20),
   [src/main/java/com/bcp/workshop/auth/LegacyDatabase.java:148](../src/main/java/com/bcp/workshop/auth/LegacyDatabase.java#L148).
   El saneamiento de WAL sigue pendiente segun [HALLAZGOS.md](../HALLAZGOS.md).
-- Los 500 exponen detalles internos; debug y el secreto de laboratorio dentro
-  del token siguen presentes. No enviar ni registrar tokens/passwords reales
-  usando este laboratorio. No hay evidencia de rate limiting en estas fuentes.
+- Los 500 exponen detalles internos y el campo debug permanece por contrato.
+  No registrar tokens, secretos ni passwords. No hay evidencia de rate limiting
+  en estas fuentes.
 - CORS acepta cualquier origen por configuracion; no es control de acceso.
   [src/main/resources/application.properties:5](../src/main/resources/application.properties#L5).
   El servicio esta destinado solo a entornos locales y aislados
