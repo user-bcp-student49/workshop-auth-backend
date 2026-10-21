@@ -2,11 +2,11 @@
 
 ## 1. Pruebas de caracterización
 
-- [ ] 1.1 Añadir una prueba de integración para `POST /auth/login` que caracterice el éxito actual: status, `token`, `expiresIn`, `user` y `debug`.
-- [ ] 1.2 Caracterizar los campos de `user` y verificar que no incluya contraseña, hash ni `client`.
-- [ ] 1.3 Caracterizar status y mensajes actuales para request nulo, username/password ausentes y credenciales inválidas.
-- [ ] 1.4 Registrar que actualmente `client` es opcional; cambiar esa expectativa al implementar el requisito nuevo y no preservar la omisión como comportamiento compatible.
-- [ ] 1.5 Asegurar que ninguna prueba trate el contenido del token legacy reversible como contrato que deba preservarse.
+- [x] 1.1 Añadir una prueba de integración para `POST /auth/login` que caracterice el éxito actual: status, `token`, `expiresIn`, `user` y `debug`.
+- [x] 1.2 Caracterizar los campos de `user` y verificar que no incluya contraseña, hash ni `client`.
+- [x] 1.3 Caracterizar status y mensajes actuales para request nulo, username/password ausentes y credenciales inválidas.
+- [x] 1.4 Registrar que actualmente `client` es opcional; cambiar esa expectativa al implementar el requisito nuevo y no preservar la omisión como comportamiento compatible.
+- [x] 1.5 Asegurar que ninguna prueba trate el contenido del token legacy reversible como contrato que deba preservarse.
 
 ## 2. Pruebas del servicio de tokens
 
